@@ -2,11 +2,22 @@
 #include <Wire.h>
 #include <Adafruit_MCP9808.h>
 #include <Adafruit_AMG88xx.h>
+#include <Adafruit_NeoPixel.h>
 
 #define CLK_PIN 27    // Rotary encoder clock pin
 #define DT_PIN 33     // Rotary encoder data pin
 #define SW_PIN 15     // Rotary encoder switch pin
+
 #define FAN_PWM_PIN 21 // PWM output pin for fan
+
+#define AMG_COLS 8    // IR Camera col
+#define AMG_ROWS 8    // IR Camera row
+
+#define NEO_PIN 14    // NeoPixel Pin
+#ifdef __AVR__
+ #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
+#endif
+#define LED_COUNT 12
 
 // Variables
 int power = 0; // Range 0-100
@@ -22,8 +33,10 @@ Adafruit_MCP9808 tempsensor = Adafruit_MCP9808();
 
 // AMG88xx IR Sensor
 Adafruit_AMG88xx amg;
-// Thermal data array
-float thermalData[8][8]; // 8x8 grid for AMG88xx sensor
+float pixels[AMG_COLS * AMG_ROWS]; // Sensor 1D data array
+
+// Declare our NeoPixel strip object:
+Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // States
 enum MainState { OFF, MANUAL, AUTOMATIC };
@@ -57,6 +70,10 @@ void setup() {
   Serial.println("MCP9808 sensor initialized.");
   // Set the sensor to shutdown mode for lower power consumption if not reading frequently
   tempsensor.setResolution(3); // Set resolution: 0 - low (0.5°C), 1 - medium (0.25°C), 2 - high (0.125°C), 3 - max (0.0625°C)
+
+  #if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
+  clock_prescale_set(clock_div_1);
+  #endif
 }
 
 void loop() {
