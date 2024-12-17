@@ -67,7 +67,9 @@ Adafruit_AMG88xx camera;
 float pixels[AMG_COLS * AMG_ROWS]; // Sensor 1D data array
 
 // Declare our NeoPixel strip object:
-`
+Adafruit_NeoPixel strip(LED_COUNT, NEO_PIN, NEO_GRB + NEO_KHZ800);
+
+// Declare timers for presence, temp sensor, thermal camera, and MQTT
 Ticker presentTimer;
 Ticker tempTimer;
 Ticker cameraTimer;
@@ -219,7 +221,7 @@ void updateMainState() {
       
       if (buttonState == LOW) {
         mainState = static_cast<MainState>((mainState + 1) % 3);
-        Serial.println("Changing to State:" + mainState);
+        Serial.println("Changing State");
       } 
     }
   }
@@ -279,7 +281,7 @@ void checkPresent() {
 
 void publishTempState() {
 
-  String output = "curr_temp: " + String(curr_temp) + "\n camera_max: " +  String(camera_max);
+  String output = "curr_temp: " + String(curr_temp) + "\n camera_max: " +  String(camera_max) + " \n Present? " + String;
   client.publish(topic, output.c_str());
 
 }
