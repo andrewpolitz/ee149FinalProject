@@ -29,8 +29,8 @@
 #include <PubSubClient.h>
 
 // WiFi
-const char *ssid = "NETGEAR82"; // Enter your Wi-Fi name
-const char *password = "icypiano627";  // Enter Wi-Fi password
+const char *ssid = "NETGEAR_CBE"; // Enter your Wi-Fi name
+const char *password = "happybug682";  // Enter Wi-Fi password
 
 // MQTT Broker
 const char *mqtt_broker = "broker.emqx.io";
@@ -67,9 +67,8 @@ Adafruit_AMG88xx camera;
 float pixels[AMG_COLS * AMG_ROWS]; // Sensor 1D data array
 
 // Declare our NeoPixel strip object:
-Adafruit_NeoPixel strip(LED_COUNT, NEO_PIN, NEO_GRB + NEO_KHZ800);
-
-Ticket presentTimer;
+`
+Ticker presentTimer;
 Ticker tempTimer;
 Ticker cameraTimer;
 Ticker mqttTimer;
@@ -141,6 +140,7 @@ void setup() {
   // set up polling timers
   presentTimer.attach(5.0, checkPresent); // checks if someone is present every 5 seconds
   tempTimer.attach(5.0, updateCurrTemp); // updates the temperature every 5 seconds
+  mqttTimer.attach(10.0, publishTempState); // sets timer to publish mqtt data
   
 }
 
@@ -153,22 +153,17 @@ void loop() {
   // State handling
   switch (mainState) {
     case OFF:
-      Serial.println("In Off Mode");
       power = 0;
       camera_flag = false;
       updateDutyCycle();
       break;
 
     case MANUAL:
-      Serial.println("In Manual Mode");
       handleManualState();
       break;
 
     case AUTOMATIC:
-      Serial.println("In Automatic Mode");
       handleAutomaticState();
-      Serial.println(curr_temp);
-      Serial.println(camera_max);
       break;
   }
 }
@@ -224,6 +219,7 @@ void updateMainState() {
       
       if (buttonState == LOW) {
         mainState = static_cast<MainState>((mainState + 1) % 3);
+        Serial.println("Changing to State:" + mainState);
       } 
     }
   }
@@ -253,34 +249,39 @@ void updateCurrTemp() {
     // updates the temp sensor
     curr_temp = tempsensor.readTempC();
     String output = "curr_temp" + String(curr_temp);
-    client.publish(topic, "temp");
+    client.publish(topic, output.c_str());
 }
 
 void checkPresent() {
- 
+
+  Serial.println("Checked Presence");
   bool pir_present = digitalRead(PIR_PIN) == HIGH;
 
   if(pir_present){
     camera_flag = true; // flag camera
+    Serial.println("Motion Detected");
+    cameraTimer.attach(2.0, updateCameraMax);
   } 
 
-  if(camera_flag && !camera_active) {
-     cameraTimer.attach(5.0, updateCameraMax);
-     camera_active = true;
-  } else {
-    cameraTimer.detach();
-    camera_active = false;
+  if(!camera_flag) {
+     cameraTimer.detach();
   }
 
   bool camera_present = (camera_max > curr_temp + 2);
 
-  // if the pir detects presence (true) or if camera is flagged and detects presence 
-  present = pir_present || (camera_present & camera_flag);
-  
+  // if the pir detects presence (true) or if camera is flagged and detects presence
   present = pir_present || (camera_present && camera_flag);
 
   // Reset camera_flag if no presence is detected
   camera_flag = present ? camera_flag : false;
+  
+}
+
+void publishTempState() {
+
+  String output = "curr_temp: " + String(curr_temp) + "\n camera_max: " +  String(camera_max);
+  client.publish(topic, output.c_str());
+
 }
 
 void configureMQTT() {
