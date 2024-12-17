@@ -44,6 +44,7 @@ PubSubClient client(espClient);
 
 // Variables
 int power = 0; // Range 0-100
+int current_power = 0;
 int curr_temp; // Current temperature
 int pref_temp = 24; // Preferred temperature
 int camera_max; // max camera pixel temp
@@ -139,6 +140,10 @@ void setup() {
   // configure wifi
   configureMQTT();
 
+  // initialize the LED strip
+  strip.begin();
+  strip.show();
+
   // set up polling timers
   presentTimer.attach(5.0, checkPresent); // checks if someone is present every 5 seconds
   tempTimer.attach(5.0, updateCurrTemp); // updates the temperature every 5 seconds
@@ -157,15 +162,19 @@ void loop() {
     case OFF:
       power = 0;
       camera_flag = false;
+      strip.clear();
+      strip.show();
       updateDutyCycle();
       break;
 
     case MANUAL:
       handleManualState();
+      lightLEDs(strip.Color(10, 55, 255));
       break;
 
     case AUTOMATIC:
       handleAutomaticState();
+      lightLEDs(strip.Color(85, 255, 9));
       break;
   }
 }
@@ -199,8 +208,12 @@ void handleAutomaticState() {
   } else {
     if (curr_temp < pref_temp) {
       int diff = pref_temp - curr_temp;
-      if (diff >= 20) power = 100;        // Max power
-      else power = 5 * diff;              // Proportional power
+      if (diff >= 20) {
+        power = 100;  // Max power
+      }      
+      else { 
+        power = 5 * diff;
+      }              // Proportional power
     } else {
       power = 0;                          // Turn off
     }
@@ -220,17 +233,83 @@ void updateMainState() {
       lastDebounceTime = millis();
       
       if (buttonState == LOW) {
+        //on press advances state and updates the led colors
         mainState = static_cast<MainState>((mainState + 1) % 3);
-        Serial.println("Changing State");
+        transitionLED(mainState);
       } 
     }
   }
   prev_press = buttonState;
 }
 
+void transitionLED(MainState nextState) {
+  // switch statement to blink the led's during a transition
+  switch (nextState) {
+      case OFF:
+        Serial.println("OFF");
+        blink(strip.Color(255, 0, 0), 2, 200);
+        break;
+      case MANUAL:
+        Serial.println("MANUAL");
+        blink(strip.Color(10, 55, 255), 2, 200);
+        break;
+      case AUTOMATIC:
+        Serial.println("AUTOMATIC");
+        blink(strip.Color(85, 255, 9), 2, 200);
+        break;
+  }
+
+}
+
+void blink(uint32_t color, int numBlinks, int interval) {
+  for (int i = 0; i < numBlinks; i++){
+    fillStrip(color);
+    delay(interval);
+    fillStrip(strip.Color(0,0,0));
+    delay(interval);
+  }
+}
+
+void fillStrip(uint32_t color) {
+  for (int i = 0; i < LED_COUNT; i++) {
+    strip.setPixelColor(i, color);
+  }
+  strip.show();
+}
+
+void lightLEDs(uint32_t color){
+
+  // maps the power input to the number of leds
+  int ledsToLight = map(power, 0, 100, 0, 12);
+
+  // turns of lights starting at the top
+  for(int i = LED_COUNT - 1; i > ledsToLight; i--){
+    strip.setPixelColor(i, 0);
+    strip.show();
+    delay(50);
+  }
+  // turns on lights starting at bottom
+  for(int i = 0; i <= ledsToLight; i++){
+    strip.setPixelColor(i, color);
+    delay(50);
+  }
+
+}
+
 void updateDutyCycle() {
   // Simulate duty cycle with LED brightness
-  analogWrite(FAN_PWM_PIN, map(power, 0, 100, 0, 255));
+  if(power == 0) {
+    analogWrite(FAN_PWM_PIN, 0);
+    current_power = 0;
+  } else {
+    if (current_power == 0) {
+       analogWrite(FAN_PWM_PIN, 255);
+       delay(500);
+    }
+    analogWrite(FAN_PWM_PIN, map(power, 0, 100, 55, 255));
+    current_power = power;
+  }
+  
 }
 
 void updateCameraMax() {
@@ -281,7 +360,7 @@ void checkPresent() {
 
 void publishTempState() {
 
-  String output = "curr_temp: " + String(curr_temp) + "\n camera_max: " +  String(camera_max) + " \n Present? " + String;
+  String output = "curr_temp: " + String(curr_temp) + "\n camera_max: " +  String(camera_max) + " \n Present? " + String(present);
   client.publish(topic, output.c_str());
 
 }
