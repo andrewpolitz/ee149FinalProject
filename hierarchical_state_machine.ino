@@ -24,6 +24,23 @@
 #endif
 #define LED_COUNT 12
 
+#include <WiFi.h>
+#include <PubSubClient.h>
+
+// WiFi
+const char *ssid = "NETGEAR82"; // Enter your Wi-Fi name
+const char *password = "icypiano627";  // Enter Wi-Fi password
+
+// MQTT Broker
+const char *mqtt_broker = "broker.emqx.io";
+const char *topic = "IoTFan/esp32";
+const char *mqtt_username = "IoTFan";
+const char *mqtt_password = "public";
+const int mqtt_port = 1883;
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
 // Variables
 int power = 0; // Range 0-100
 int curr_temp; // Current temperature
@@ -64,7 +81,6 @@ void handleAutomaticState();
 void updateDutyCycle();
 
 void setup() {
-
 
   Serial.begin(115200);
 
@@ -108,19 +124,37 @@ void setup() {
   #if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
   clock_prescale_set(clock_div_1);
   #endif
+
+  //WIFI + MQTT Set Up
+  WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.println("Connecting to WiFi..");
+    }
+    Serial.println("Connected to the Wi-Fi network");
+    //connecting to a mqtt broker
+    client.setServer(mqtt_broker, mqtt_port);
+    client.setCallback(callback);
+    while (!client.connected()) {
+        String client_id = "esp32-client-";
+        client_id += String(WiFi.macAddress());
+        Serial.printf("The client %s connects to the public MQTT broker\n", client_id.c_str());
+        if (client.connect(client_id.c_str(), mqtt_username, mqtt_password)) {
+            Serial.println("Public EMQX MQTT broker connected");
+        } else {
+            Serial.print("failed with state ");
+            Serial.print(client.state());
+            delay(2000);
+        }
+    }
+    // Publish and subscribe
+    client.publish(topic, "Hi, I'm your ESP32 smart fan ^^");
+    client.subscribe(topic);
 }
 
 void loop() {
 
-  // Check for button clicks to switch modes
-  // updateSWPress();
-
-  // if (sw_press) {
-  //   if (mainState == OFF) mainState = MANUAL;
-  //   else if (mainState == MANUAL) mainState = AUTOMATIC;
-  //   else mainState = OFF;
-  // }
-  // sw_press = false;
+  client.loop();
 
   updateMainState();
 
@@ -230,6 +264,8 @@ void updateCameraMax() {
 void updateCurrTemp() {
     // updates the temp sensor
     curr_temp = tempsensor.readTempC();
+    String output = "curr_temp" + String(curr_temp);
+    client.publish(topic, "temp");
 }
 
 void checkPresent() {
@@ -252,4 +288,15 @@ void checkPresent() {
 
   // Reset camera_flag if no presence is detected
   camera_flag = present ? camera_flag : false;
+}
+
+void callback(char *topic, byte *payload, unsigned int length) {
+    Serial.print("Message arrived in topic: ");
+    Serial.println(topic);
+    Serial.print("Message:");
+    for (int i = 0; i < length; i++) {
+        Serial.print((char) payload[i]);
+    }
+    Serial.println();
+    Serial.println("-----------------------");
 }
