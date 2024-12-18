@@ -388,7 +388,7 @@ void checkPresent() {
 
 void publishTempState() {
 
-  String output = " curr_temp: " + String(curr_temp) + "\n camera_max: " +  String(camera_max) + " \n Present? " + String(present);
+  String output = " Current Temp: " + String(curr_temp) + "\n Camera Max: " +  String(camera_max) + " \n Present? " + String(present);
   client.publish(topic, output.c_str());
 
 }
@@ -433,12 +433,13 @@ void callback(char *topic, byte *payload, unsigned int length) {
         message += (char) payload[i];
     }
 
-    int recieved_temp = message.toInt();
-    if(recieved_temp > 0) {
+    int received_temp = message.toInt();
+    if(received_temp > 0) {
       //attempt to read incoming message to update preference temperature
-      pref_temp = recieved_temp;
+      pref_temp = received_temp;
+      Serial.println("Preferance Updated: " + String(received_temp));
     }
-    Serial.println(message);
+
     Serial.println();
     Serial.println("-----------------------");
 }
