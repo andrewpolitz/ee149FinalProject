@@ -29,8 +29,8 @@
 #include <PubSubClient.h>
 
 // WiFi
-const char *ssid = "NETGEAR_CBE"; // Enter your Wi-Fi name
-const char *password = "happybug682";  // Enter Wi-Fi password
+const char *ssid = ""; // Enter your Wi-Fi name
+const char *password = "";  // Enter Wi-Fi password
 
 // MQTT Broker
 const char *mqtt_broker = "broker.emqx.io";
@@ -52,14 +52,16 @@ int camera_max; // max camera pixel temp
 bool present = false;
 bool sw_press = false;
 bool prev_press = false;
-int clk_count = 0;
-int curr_clk;
-int prev_clk;
-bool e_dir = false;
 bool camera_flag = false;
 bool camera_active = false;
 
-unsigned long lastDebounceTime = 0;
+int clk_count = 0;
+int curr_clk;
+int prev_clk;
+
+
+unsigned long lastPressTime = 0;
+unsigned long lastClickTime;
 const unsigned long debounceDelay = 50; // 50 ms debounce delay
 
 // Create Temperature Sensor object
@@ -85,11 +87,6 @@ enum SubState { SUB_OFF, SUB_ON };
 MainState mainState = OFF;
 SubState subState = SUB_OFF;
 
-// Function prototypes
-void handleOffState();
-void handleManualState();
-void handleAutomaticState();
-void updateDutyCycle();
 
 void setup() {
 
@@ -120,7 +117,7 @@ void setup() {
   Serial.println("MCP9808 sensor initialized.");
 
  // initialize thermal camera
-   while (!camera.begin()) {
+  while (!camera.begin()) {
     Serial.println("Could not find a valid AMG88xx sensor. Check wiring!");
     delay(1000);
   }
@@ -233,18 +230,26 @@ void readEncoder() {
     
 	  if (curr_clk != prev_clk && curr_clk == 1){
 
-      if (digitalRead(DT_PIN) != curr_clk) {
-        // Counter clockwise rotation
-        // set range to min 0
-        if (clk_count > 0){
-          clk_count -= 10;
+      if (millis() - lastClickTime > debounceDelay) {
+        
+        lastClickTime = millis();
+
+        if (digitalRead(DT_PIN) != curr_clk) {
+          // Counter clockwise rotation
+          // set range to min 0
+          if (clk_count > 0){
+            clk_count -= 10;
+          }
+
+        } else {
+          // Clockwise rotation
+          // set range to max 100
+          if (clk_count < 100) {
+            clk_count += 10;
+          }
+
         }
-      } else {
-        // Clockwise rotation
-        // set range to max 100
-        if (clk_count < 100) {
-          clk_count += 10;
-        }
+
       }
     }
  }
@@ -254,8 +259,8 @@ void updateMainState() {
   bool buttonState = digitalRead(SW_PIN);
 
   if (buttonState != prev_press) {
-    if (millis() - lastDebounceTime > debounceDelay) {
-      lastDebounceTime = millis();
+    if (millis() - lastPressTime > debounceDelay) {
+      lastPressTime = millis();
       
       if (buttonState == LOW) {
         //on press advances state and updates the led colors

@@ -29,8 +29,8 @@
 #include <PubSubClient.h>
 
 // WiFi
-const char *ssid = "NETGEAR_CBE";      // Enter your Wi-Fi name
-const char *password = "happybug682";  // Enter Wi-Fi password
+const char *ssid = "";      // Enter your Wi-Fi name
+const char *password = "";  // Enter Wi-Fi password
 
 // MQTT Broker
 const char *mqtt_broker = "broker.emqx.io";
@@ -46,19 +46,24 @@ PubSubClient client(espClient);
 int power = 0;  // Range 0-100
 int current_power = 0;
 int curr_temp;       // Current temperature
-int pref_temp = 24;  // Preferred temperature
+int pref_temp = 16;  // Preferred temperature
 int camera_max;      // max camera pixel temp
 
 bool present = false;
 bool sw_press = false;
 bool prev_press = false;
-bool e_tick = false;
-bool e_dir = false;
+
 bool camera_flag = false;
 bool camera_active = false;
 
-unsigned long lastDebounceTime = 0;
-const unsigned long debounceDelay = 50;  // 50 ms debounce delay
+int clk_count = 0;
+int curr_clk;
+int prev_clk;
+
+
+unsigned long lastPressTime = 0;
+unsigned long lastClickTime;
+const unsigned long debounceDelay = 50; // 50 ms debounce delay
 
 // Create Temperature Sensor object
 Adafruit_MCP9808 tempsensor = Adafruit_MCP9808();
@@ -111,20 +116,20 @@ void setup() {
   Wire.begin(SDA, SCL);
 
   // Initialize Temperature Sensor
-  if (!tempsensor.begin(0x18)) {  // Default I2C address is 0x18
+  while (!tempsensor.begin(0x18)) { // Default I2C address is 0x18
     Serial.println("Couldn't find MCP9808 sensor! Check wiring.");
-    while (1)
-      ;  // Halt execution
+    Serial.println("Try connecting the board to power.");
+    delay(1000);
+     // Halt execution
   }
 
   Serial.println("MCP9808 sensor initialized.");
 
   // initialize thermal camera
-  if (!camera.begin()) {
+  while (!camera.begin()) {
     Serial.println("Could not find a valid AMG88xx sensor. Check wiring!");
-    while (1) delay(1);
+    delay(1000);
   }
-
   Serial.println("AMG8833 Thermal Camera initialized!");
 
 
@@ -147,6 +152,9 @@ void setup() {
   // initialize the LED strip
   strip.begin();
   strip.show();
+
+  // get first encoder reading
+  prev_clk = digitalRead(CLK_PIN);
 
   // set up polling timers
   presentTimer.attach(5.0, checkPresent);    // checks if someone is present every 5 seconds
@@ -185,16 +193,13 @@ void loop() {
 
 void handleManualState() {
 
+  readEncoder();
+
   if (!present) {
     subState = SUB_OFF;
     power = 0;
-  } else if (e_tick) {
-
-    if (e_dir && power < 100) {
-      power += 10;  // Increase power
-    } else if (!e_dir && power > 0) {
-      power -= 10;  // Decrease power
-    }
+  } else {
+    power = clk_count;
   }
 
   // Update substate
@@ -203,13 +208,13 @@ void handleManualState() {
 }
 
 void handleAutomaticState() {
-
+   // uses the camera's intput to adjust fan based on the users body temperature
   if (!present) {
     subState = SUB_OFF;
     power = 0;
   } else {
-    if (curr_temp < camera_max) {
-      int diff = camera_max - curr_temp;
+    if (pref_temp < camera_max) {
+      int diff = camera_max - pref_temp;
       if (diff >= 20) {
         power = 100;  // Max power
       } else {
@@ -230,8 +235,8 @@ void updateMainState() {
   bool buttonState = digitalRead(SW_PIN);
 
   if (buttonState != prev_press) {
-    if (millis() - lastDebounceTime > debounceDelay) {
-      lastDebounceTime = millis();
+    if (millis() - lastPressTime > debounceDelay) {
+      lastPressTime = millis();
 
       if (buttonState == LOW) {
         //on press advances state and updates the led colors
@@ -242,6 +247,36 @@ void updateMainState() {
   }
   prev_press = buttonState;
 }
+
+void readEncoder() {
+
+    curr_clk = digitalRead(CLK_PIN);
+    
+	  if (curr_clk != prev_clk && curr_clk == 1){
+
+      if (millis() - lastClickTime > debounceDelay) {
+        
+        lastClickTime = millis();
+
+        if (digitalRead(DT_PIN) != curr_clk) {
+          // Counter clockwise rotation
+          // set range to min 0
+          if (clk_count > 0){
+            clk_count -= 10;
+          }
+
+        } else {
+          // Clockwise rotation
+          // set range to max 100
+          if (clk_count < 100) {
+            clk_count += 10;
+          }
+
+        }
+
+      }
+    }
+ }
 
 void transitionLED(MainState nextState) {
   // switch statement to blink the led's during a transition
@@ -327,8 +362,7 @@ void updateCameraMax() {
 void updateCurrTemp() {
   // updates the temp sensor
   curr_temp = tempsensor.readTempC();
-  String output = "curr_temp" + String(curr_temp);
-  client.publish(topic, output.c_str());
+
 }
 
 void checkPresent() {
@@ -357,7 +391,7 @@ void checkPresent() {
 
 void publishTempState() {
 
-  String output = "curr_temp: " + String(curr_temp) + "\n camera_max: " + String(camera_max) + " \n Present? " + String(present);
+  String output = " curr_temp: " + String(curr_temp) + "\n camera_max: " + String(camera_max) + " \n Present? " + String(present);
   client.publish(topic, output.c_str());
 }
 
@@ -390,12 +424,21 @@ void configureMQTT() {
 }
 
 void callback(char *topic, byte *payload, unsigned int length) {
+
   Serial.print("Message arrived in topic: ");
   Serial.println(topic);
   Serial.print("Message:");
+  String message;
   for (int i = 0; i < length; i++) {
+    message += (char)payload[i];
     Serial.print((char)payload[i]);
   }
+  
+  int recieved_temp = message.toInt();
+  if(recieved_temp > 0) {
+    pref_temp = recieved_temp;
+  }
+
   Serial.println();
   Serial.println("-----------------------");
 }
