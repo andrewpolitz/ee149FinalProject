@@ -62,7 +62,7 @@ int prev_clk;
 
 
 unsigned long lastPressTime = 0;
-unsigned long lastClickTime;
+unsigned long lastClickTime = 0;
 const unsigned long debounceDelay = 50; // 50 ms debounce delay
 
 // Create Temperature Sensor object
