@@ -1,0 +1,58 @@
+esphome:
+  name: athomeconfig
+  friendly_name: atHomeConfig
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+
+ota:
+  - platform: esphome
+    
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Athomeconfig Fallback Hotspot"
+    password: "9egTNeawwK1Z"
+
+captive_portal:
+
+output:
+  - platform: gpio
+    pin: GPIO13
+    id: led_gpio
+
+switch:
+  - platform: output
+    name: "ESP32 LED"
+    output: led_gpio
+    id: led_switch
+    restore_mode: ALWAYS_ON
+    disabled_by_default: True
+
+sensor:
+  - platform: rotary_encoder
+    name: "Rotary Encoder"
+    pin_a: GPIO12
+    pin_b: GPIO27
+
+binary_sensor:
+  - platform: gpio
+    name: "Button Press"
+    pin:
+      number: GPIO33
+      mode: 
+        input: True
+        pullup: True
+  
