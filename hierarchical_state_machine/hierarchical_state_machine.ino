@@ -29,8 +29,8 @@
 #include <PubSubClient.h>
 
 // WiFi
-const char *ssid = "NETGEAR82"; // Enter your Wi-Fi name
-const char *password = "icypiano627";  // Enter Wi-Fi password
+const char *ssid = ""; // Enter your Wi-Fi name
+const char *password = "";  // Enter Wi-Fi password
 
 // MQTT Broker
 const char *mqtt_broker = "broker.emqx.io";
