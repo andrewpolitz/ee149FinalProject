@@ -29,8 +29,8 @@
 #include <PubSubClient.h>
 
 // WiFi
-const char *ssid = "NETGEAR82"; // Enter your Wi-Fi name
-const char *password = "icypiano627";  // Enter Wi-Fi password
+const char *ssid = ""; // Enter your Wi-Fi name
+const char *password = "";  // Enter Wi-Fi password
 
 // MQTT Broker
 const char *mqtt_broker = "broker.emqx.io";
@@ -293,8 +293,18 @@ void updateMainState() {
       if (buttonState == LOW) {
         //on press advances state and updates the led colors
         mainState = static_cast<MainState>((mainState + 1) % 3);
+        if (mainState == OFF){
+            presentTimer.detach(); // checks if someone is present every 5 seconds
+            tempTimer.detach(); // updates the temperature every 5 seconds
+            mqttTimer.detach(); // sets timer to publish mqtt data
+            encoderTimer.detach();
+        }
         if( mainState == MANUAL){
           clk_count = 0;
+            presentTimer.attach(5.0, checkPresent); // checks if someone is present every 5 seconds
+            tempTimer.attach(10.0, updateCurrTemp); // updates the temperature every 5 seconds
+            mqttTimer.attach(10.0, publishTempState); // sets timer to publish mqtt data
+            encoderTimer.attach(0.0001,readEncoder);
         }
         transitionLED(mainState);
       } 
@@ -347,13 +357,13 @@ void lightLEDs(uint32_t color){
     //Serial.println(ledsToLight);
 
   // turns off lights starting at the top
-  for(int i = LED_COUNT - 1; i > ledsToLight; i--){
+  for(int i = LED_COUNT - 1; i >= ledsToLight; i--){
     strip.setPixelColor(i, 0);
     //strip.show();
     //delay(1);
   }
   // turns on lights starting at bottom
-  for(int i = 0; i <= ledsToLight; i++){
+  for(int i = 0; i < ledsToLight; i++){
     strip.setPixelColor(i, color);
     //delay(1);
   }
@@ -368,7 +378,7 @@ void updateDutyCycle() {
   } else {
     if (current_power == 0) {
        analogWrite(FAN_PWM_PIN, 255);
-       delay(500);
+       delay(50);
     }
     analogWrite(FAN_PWM_PIN, map(power, 0, 100, 120, 255));
     current_power = power;
@@ -381,21 +391,23 @@ void updateCameraMax() {
   camera.readPixels(pixels);
 
   int maxTemp = pixels[0];
-  for(int i = 1; i < AMG_COLS * AMG_ROWS; i++) {
+  /*for(int i = 1; i < AMG_COLS * AMG_ROWS; i++) {
     if (pixels[i] > maxTemp) {
       maxTemp = pixels[i];
     }
-  }
-
+  }*/
+  //column 3 & 4, row 5 & 6 (others are getting affected by camera temperature + housing...)
+  maxTemp = max(max(pixels[5*8 + 3], pixels[5*8 + 4]), max(pixels[6*8 + 3], pixels[6*8 + 4])); //only lets us do 2 per max
   camera_max = maxTemp;
 }
 
 void updateCurrTemp() {
     // updates the temp sensor
     tempsensor.wake();
-    delay(500);
+    //delay(500); //may or may not be needed
     curr_temp = tempsensor.readTempC();
     tempsensor.shutdown();
+    Serial.println("Updated temp reading: " + curr_temp);
 }
 
 void checkPresent() {
@@ -428,6 +440,7 @@ void publishTempState() {
 
   String output = " Current Temp: " + String(curr_temp) + "\n Camera Max: " +  String(camera_max) + " \n Present? " + String(present);
   client.publish(topic, output.c_str());
+  Serial.println("MQTT: " + output);
 
 }
 
