@@ -259,18 +259,18 @@ void readEncoder() {
         lastClickTime = millis();
 
         if (digitalRead(DT_PIN) != curr_clk) {
-          // Counter clockwise rotation
-          // set range to min 0
-          if (clk_count > 0){
-            clk_count -= 10;
-          }
+            // Counter clockwise rotation
+            // set range to min 0
+            if (clk_count > 0){
+              clk_count -= 10;
+            }
 
-        } else {
-          // Clockwise rotation
-          // set range to max 100
-          if (clk_count < 100) {
-            clk_count += 10;
-          }
+          } else {
+            // Clockwise rotation
+            // set range to max 100
+            if (clk_count < 100) {
+              clk_count += 10;
+            }
 
         }
 
@@ -326,6 +326,7 @@ void lightLEDs(uint32_t color) {
   // turns on lights starting at bottom
   for (int i = 0; i <= ledsToLight; i++) {
     strip.setPixelColor(i, color);
+    strip.show();
     delay(50);
   }
 }
@@ -391,7 +392,7 @@ void checkPresent() {
 
 void publishTempState() {
 
-  String output = " Current Temp: " + String(curr_temp) + "\n Camera Max: " + String(camera_max) + " \n Present? " + String(present);
+  String output = " Current Temp: " + String(curr_temp) + "\n Camera Max: " + String(camera_max) + "\n Current Power:" + String(power) + " \n Present? " + String(present);
   client.publish(topic, output.c_str());
 }
 
