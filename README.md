@@ -1,7 +1,7 @@
 # ee149FinalProject
 ## HVAC-Integrated Personal Fan Software
 
-This projects intially aimed to create automations strictly in the ESPHome framework to control an fan with a temperature sensor, thermal camera, and rotary encoder. However, defining state and adding more specific automations for unsupported sensors (.yaml) became difficult and as a result the project was transfered into the Arduino IDE. In this the sensors are pulled using timers and WIFI controlled by an MQTT interupt.
+This project intially aimed to create automations strictly in the ESPHome framework to control an fan with a temperature sensor, thermal camera, and rotary encoder. However, defining state and adding more specific automations for unsupported sensors (.yaml) became difficult and as a result the project was transfered into the Arduino IDE. In this the sensors are pulled using timers and WIFI controlled by an MQTT interupt.
 
 Two instances of the state machines for this fan are covered in this repository, one where the automatic state for fan control speed is controlled by the current temperature read by the temperature sensor compared to a desired input temperature. The other updates the fan speed by observing the users temperature throught the thermal camera and attempting to approach a desired temperature.
 
