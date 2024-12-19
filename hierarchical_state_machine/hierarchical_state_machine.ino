@@ -29,8 +29,8 @@
 #include <PubSubClient.h>
 
 // WiFi
-const char *ssid = ""; // Enter your Wi-Fi name
-const char *password = "";  // Enter Wi-Fi password
+const char *ssid = "NETGEAR82"; // Enter your Wi-Fi name
+const char *password = "icypiano627";  // Enter Wi-Fi password
 
 // MQTT Broker
 const char *mqtt_broker = "broker.emqx.io";
@@ -46,7 +46,7 @@ PubSubClient client(espClient);
 int power = 0; // Range 0-100
 int current_power = 0;
 int curr_temp; // Current temperature
-int pref_temp = 25; // Preferred temperature
+int pref_temp = 20; // Preferred temperature
 int camera_max; // max camera pixel temp
 
 bool present = false;
@@ -59,6 +59,7 @@ int clk_count = 0;
 int curr_clk;
 int prev_clk;
 int dir = 0;
+String currentDir;
 
 
 unsigned long lastPressTime = 0;
@@ -80,6 +81,7 @@ Ticker presentTimer;
 Ticker tempTimer;
 Ticker cameraTimer;
 Ticker mqttTimer;
+Ticker encoderTimer;
 
 // States
 enum MainState { OFF, MANUAL, AUTOMATIC };
@@ -128,10 +130,6 @@ void setup() {
   
   // start the temp sensor
   tempsensor.setResolution(3); // Set resolution: 0 - low (0.5°C), 1 - medium (0.25°C), 2 - high (0.125°C), 3 - max (0.0625°C)
-  tempsensor.wake(); // start temp sensor
-  
-  delay(250); // let temp sensor stabilize
-
   updateCurrTemp(); // ensures an initial temperature value
   updateCameraMax(); // grabs an initial picture of the environment
 
@@ -150,24 +148,43 @@ void setup() {
   //prev_clk = digitalRead(CLK_PIN);
 
   // set up polling timers
-  presentTimer.attach(30.0, checkPresent); // checks if someone is present every 5 seconds
+  presentTimer.attach(5.0, checkPresent); // checks if someone is present every 5 seconds
   tempTimer.attach(10.0, updateCurrTemp); // updates the temperature every 5 seconds
-  mqttTimer.attach(60.0, publishTempState); // sets timer to publish mqtt data
+  mqttTimer.attach(10.0, publishTempState); // sets timer to publish mqtt data
+  encoderTimer.attach(0.0001,readEncoder);
 
-  lastClickTime = 0;
+  lastClickTime = digitalRead(CLK_PIN);
   prev_clk = LOW;
-
-  
 }
 
 void loop() {
 
   //client.loop();
-  readEncoder();
+  //readEncoder();
+  /*	curr_clk = digitalRead(CLK_PIN);
+  if (curr_clk != prev_clk  && curr_clk == 1){
+    if (digitalRead(DT_PIN) != curr_clk) {
+			if(clk_count > 1){
+        clk_count --;
+			  currentDir ="CCW";
+      }
+		} else {
+      if(clk_count < 10){
+        clk_count ++;
+			  currentDir ="CW";
+      }
+		}
+    Serial.print("Direction: ");
+		Serial.print(currentDir);
+		Serial.print(" | Counter: ");
+		Serial.println(clk_count);
+	}
+  prev_clk = curr_clk;*/
+
+
+
 
   updateMainState();
-
-
 
   // State handling
   switch (mainState) {
@@ -190,7 +207,7 @@ void loop() {
       lightLEDs(strip.Color(85, 255, 9));
       break;
   }
-  delay(1); //maybe needed?
+  //delay(0); //maybe needed?
 }
 
 
@@ -204,13 +221,17 @@ void handleManualState() {
   } else {
     power = clk_count;
   } */
-  power = clk_count;
 
-  // Update substate
-  subState = (power > 0) ? SUB_ON : SUB_OFF;
-  //print(subState);
-  updateDutyCycle();
-  delay(1);
+  //double check if we need to update duty cycle...
+  if (power != clk_count){
+    power = clk_count;
+    // Update substate
+    //subState = (power > 0) ? SUB_ON : SUB_OFF;
+
+    //print(subState);
+    updateDutyCycle();
+  }
+  //delay(1);
 }
 
 void handleAutomaticState() {
@@ -221,11 +242,11 @@ void handleAutomaticState() {
   } else {
     if (curr_temp > pref_temp) {
       int diff = curr_temp - pref_temp;
-      if (diff >= 20) {
+      if (diff >= 10) {
         power = 100;  // Max power
       }      
       else { 
-        power = 5 * diff;
+        power = 10 * diff;
       }   // Proportional power
     } else {
       power = 0; // Turn off
@@ -240,45 +261,25 @@ void handleAutomaticState() {
 }
 
 void readEncoder() {
-
-    curr_clk = digitalRead(CLK_PIN);
-    dir = digitalRead(DT_PIN);
-    //dir = digitalRead(DT_PIN);
-    //Serial.println("NO READ!"); 
-	  if (curr_clk != prev_clk && curr_clk == 1){
-      //update encoder
-      Serial.println("ENCODER READ!"); 
-      Serial.println("clk: " + String(curr_clk) + " dir:" + String(dir));
-
-      //Serial.println(dir);
-
-      //if (millis() - lastClickTime > debounceDelay) {
-        
-        lastClickTime = millis();
-       // Serial.println(dir);
-       // dir = digitalRead(DT_PIN);
-
-        if (dir != curr_clk) { //0
-          // Counter clockwise rotation
-          // set range to min 0
-          Serial.println("neg");
-          if (clk_count > 0){
-            clk_count -= 10;
-          }
-
-        } else {
-          // Clockwise rotation
-          // set range to max 100
-          if (clk_count < 100) {
-            clk_count += 10;
-          }
-
-        }
-        //prev_clk = curr_clk;
-      //} timing
-      //prev_clk = curr_clk;
-    }
-    prev_clk = curr_clk;
+  	curr_clk = digitalRead(CLK_PIN);
+  if (curr_clk != prev_clk  && curr_clk == 1){
+    if (digitalRead(DT_PIN) == curr_clk) {
+			if(clk_count > 0){
+        clk_count -= 10;
+			  currentDir ="CCW";
+      }
+		} else {
+      if(clk_count < 100){
+        clk_count += 10;
+			  currentDir ="CW";
+      }
+		}
+    Serial.print("Direction: ");
+		Serial.print(currentDir);
+		Serial.print(" | Counter: ");
+		Serial.println(clk_count);
+	}
+  prev_clk = curr_clk;
  }
 
 void updateMainState() {
@@ -340,7 +341,7 @@ void fillStrip(uint32_t color) {
 void lightLEDs(uint32_t color){
 
   // maps the power input to the number of leds
-  int ledsToLight = map(power, 0, 100, 0, 12);
+  int ledsToLight = map(power, 0, 100, 0, LED_COUNT);
    // Serial.println("power, lights: ");
     //Serial.println(power);
     //Serial.println(ledsToLight);
@@ -349,12 +350,12 @@ void lightLEDs(uint32_t color){
   for(int i = LED_COUNT - 1; i > ledsToLight; i--){
     strip.setPixelColor(i, 0);
     //strip.show();
-    delay(5);
+    //delay(1);
   }
   // turns on lights starting at bottom
   for(int i = 0; i <= ledsToLight; i++){
     strip.setPixelColor(i, color);
-    delay(5);
+    //delay(1);
   }
   strip.show();
 }
@@ -391,7 +392,10 @@ void updateCameraMax() {
 
 void updateCurrTemp() {
     // updates the temp sensor
+    tempsensor.wake();
+    delay(500);
     curr_temp = tempsensor.readTempC();
+    tempsensor.shutdown();
 }
 
 void checkPresent() {
