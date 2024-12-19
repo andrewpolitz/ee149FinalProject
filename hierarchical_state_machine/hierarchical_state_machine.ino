@@ -8,9 +8,9 @@
 #define SCL 22 // SCL PIN on our ESP32 
 #define SDA 23 // SDA PIN on our ESP32
 
-#define CLK_PIN 27    // Rotary encoder clock pin
-#define DT_PIN 33     // Rotary encoder data pin
-#define SW_PIN 15     // Rotary encoder switch pin
+#define CLK_PIN 12    // Rotary encoder clock pin
+#define DT_PIN 27     // Rotary encoder data pin
+#define SW_PIN 33     // Rotary encoder switch pin
 
 #define FAN_PWM_PIN 21 // PWM output pin for fan
 
@@ -19,18 +19,18 @@
 
 #define PIR_PIN 32    // PIR Sensor Pin
 
-#define NEO_PIN 14    // NeoPixel Pin
+#define NEO_PIN 13    // NeoPixel Pin
 #ifdef __AVR__
  #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
 #endif
-#define LED_COUNT 12
+#define LED_COUNT 24
 
 #include <WiFi.h>
 #include <PubSubClient.h>
 
 // WiFi
-const char *ssid = ""; // Enter your Wi-Fi name
-const char *password = "";  // Enter Wi-Fi password
+const char *ssid = "NETGEAR82"; // Enter your Wi-Fi name
+const char *password = "icypiano627";  // Enter Wi-Fi password
 
 // MQTT Broker
 const char *mqtt_broker = "broker.emqx.io";
@@ -58,11 +58,12 @@ bool camera_active = false;
 int clk_count = 0;
 int curr_clk;
 int prev_clk;
+int dir = 0;
 
 
 unsigned long lastPressTime = 0;
-unsigned long lastClickTime = 0;
-const unsigned long debounceDelay = 50; // 50 ms debounce delay
+unsigned long lastClickTime;
+const unsigned long debounceDelay = 5; // 50 ms debounce delay
 
 // Create Temperature Sensor object
 Adafruit_MCP9808 tempsensor = Adafruit_MCP9808();
@@ -93,8 +94,8 @@ void setup() {
   Serial.begin(115200);
 
   // Rotaty Encoder
-  pinMode(CLK_PIN, INPUT_PULLUP);
-  pinMode(DT_PIN, INPUT_PULLUP);
+  pinMode(CLK_PIN, INPUT);
+  pinMode(DT_PIN, INPUT);
   pinMode(SW_PIN, INPUT_PULLUP);
 
   // Fan PWN
@@ -146,18 +147,23 @@ void setup() {
   strip.show();
 
   // get first encoder reading
-  prev_clk = digitalRead(CLK_PIN);
+  //prev_clk = digitalRead(CLK_PIN);
 
   // set up polling timers
-  presentTimer.attach(5.0, checkPresent); // checks if someone is present every 5 seconds
-  tempTimer.attach(5.0, updateCurrTemp); // updates the temperature every 5 seconds
-  mqttTimer.attach(10.0, publishTempState); // sets timer to publish mqtt data
+  presentTimer.attach(30.0, checkPresent); // checks if someone is present every 5 seconds
+  tempTimer.attach(10.0, updateCurrTemp); // updates the temperature every 5 seconds
+  mqttTimer.attach(60.0, publishTempState); // sets timer to publish mqtt data
+
+  lastClickTime = 0;
+  prev_clk = LOW;
+
   
 }
 
 void loop() {
 
-  client.loop();
+  //client.loop();
+  //readEncoder();
 
   updateMainState();
 
@@ -181,6 +187,7 @@ void loop() {
       lightLEDs(strip.Color(85, 255, 9));
       break;
   }
+  delay(1); //maybe needed?
 }
 
 
@@ -188,15 +195,17 @@ void handleManualState() {
 
   readEncoder();
 
-  if (!present) {
+  /*if (!present) {
     subState = SUB_OFF;
     power = 0;
   } else {
     power = clk_count;
-  } 
+  } */
+  power = clk_count;
 
   // Update substate
   subState = (power > 0) ? SUB_ON : SUB_OFF;
+  //print(subState);
   updateDutyCycle();
 }
 
@@ -227,16 +236,22 @@ void handleAutomaticState() {
 void readEncoder() {
 
     curr_clk = digitalRead(CLK_PIN);
-    
+    //dir = digitalRead(DT_PIN);
+    //Serial.println("NO READ!"); 
 	  if (curr_clk != prev_clk && curr_clk == 1){
+      //update encoder
+      Serial.println("ENCODER READ!"); 
+      //Serial.println(dir);
 
       if (millis() - lastClickTime > debounceDelay) {
         
         lastClickTime = millis();
+        
 
-        if (digitalRead(DT_PIN) != curr_clk) {
+        if (digitalRead(DT_PIN) != curr_clk) { //0
           // Counter clockwise rotation
           // set range to min 0
+          Serial.println("neg");
           if (clk_count > 0){
             clk_count -= 10;
           }
@@ -249,9 +264,10 @@ void readEncoder() {
           }
 
         }
-
+        //prev_clk = curr_clk;
       }
     }
+    prev_clk = curr_clk;
  }
 
 void updateMainState() {
@@ -311,21 +327,22 @@ void lightLEDs(uint32_t color){
 
   // maps the power input to the number of leds
   int ledsToLight = map(power, 0, 100, 0, 12);
+   // Serial.println("power, lights: ");
+    //Serial.println(power);
+    //Serial.println(ledsToLight);
 
-  // turns of lights starting at the top
+  // turns off lights starting at the top
   for(int i = LED_COUNT - 1; i > ledsToLight; i--){
     strip.setPixelColor(i, 0);
-    strip.show();
-    delay(50);
+    //strip.show();
+    delay(5);
   }
   // turns on lights starting at bottom
   for(int i = 0; i <= ledsToLight; i++){
     strip.setPixelColor(i, color);
-    strip.show()
-    delay(50);
+    delay(5);
   }
-
-
+  strip.show();
 }
 
 void updateDutyCycle() {
@@ -382,6 +399,7 @@ void checkPresent() {
 
   // if the pir detects presence (true) or if camera is flagged and detects presence
   present = pir_present || (camera_present && camera_flag);
+  Serial.println(present);
 
   // Reset camera_flag if no presence is detected
   camera_flag = present ? camera_flag : false;
@@ -390,7 +408,7 @@ void checkPresent() {
 
 void publishTempState() {
 
-  String output = " Current Temp: " + String(curr_temp) + "\n Camera Max: " +  String(camera_max) + "\n Current Power:" + String(power) + " \n Present? " + String(present);
+  String output = " Current Temp: " + String(curr_temp) + "\n Camera Max: " +  String(camera_max) + " \n Present? " + String(present);
   client.publish(topic, output.c_str());
 
 }
@@ -427,8 +445,8 @@ void callback(char *topic, byte *payload, unsigned int length) {
 
     
     Serial.print("Message arrived in topic: ");
-    Serial.println(topic);
-    Serial.print("Message:");
+    //Serial.println(topic);
+    //Serial.print("Message:");
     String message;
 
     for (int i = 0; i < length; i++) {
@@ -439,9 +457,9 @@ void callback(char *topic, byte *payload, unsigned int length) {
     if(received_temp > 0) {
       //attempt to read incoming message to update preference temperature
       pref_temp = received_temp;
-      Serial.println("Preferance Updated: " + String(received_temp));
+      //Serial.println("Preferance Updated: " + String(received_temp));
     }
 
-    Serial.println();
-    Serial.println("-----------------------");
+    //Serial.println();
+    //Serial.println("-----------------------");
 }
