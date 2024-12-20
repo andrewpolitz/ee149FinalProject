@@ -34,9 +34,9 @@ const char *password = "";  // Enter Wi-Fi password
 
 // MQTT Broker
 const char *mqtt_broker = "broker.emqx.io";
-const char *topic = "IoTFan/esp32";
-const char *mqtt_username = "IoTFan";
-const char *mqtt_password = "public";
+const char *topic = "IoTFan2/esp32";
+const char *mqtt_username = "";
+const char *mqtt_password = "";
 const int mqtt_port = 1883;
 
 WiFiClient espClient;
@@ -46,7 +46,7 @@ PubSubClient client(espClient);
 int power = 0; // Range 0-100
 int current_power = 0;
 int curr_temp; // Current temperature
-int pref_temp = 20; // Preferred temperature
+int pref_temp = 16; // Preferred temperature
 int camera_max; // max camera pixel temp
 
 bool present = false;
@@ -215,15 +215,20 @@ void handleManualState() {
 
   //readEncoder();
 
-  /*if (!present) {
+ /* if (!present) {
     subState = SUB_OFF;
     power = 0;
   } else {
     power = clk_count;
+    subState = SUB_ON;
   } */
 
   //double check if we need to update duty cycle...
   if (power != clk_count){
+   // if(subState == SUB_ON){
+     //     power = clk_count;
+
+//    }
     power = clk_count;
     // Update substate
     //subState = (power > 0) ? SUB_ON : SUB_OFF;
@@ -257,7 +262,7 @@ void handleAutomaticState() {
   subState = (power > 0) ? SUB_ON : SUB_OFF;
   updateDutyCycle();
   Serial.println("curr temp:" + String(curr_temp) + " pref temp: " + String(pref_temp) + " power:" + String(power));
-
+  delay(1);
 }
 
 void readEncoder() {
@@ -367,6 +372,7 @@ void lightLEDs(uint32_t color){
     strip.setPixelColor(i, color);
     //delay(1);
   }
+  delay(1);
   strip.show();
 }
 
@@ -408,6 +414,7 @@ void updateCurrTemp() {
     curr_temp = tempsensor.readTempC();
     tempsensor.shutdown();
     Serial.println("Updated temp reading: " + curr_temp);
+    
 }
 
 void checkPresent() {
@@ -416,17 +423,17 @@ void checkPresent() {
   bool pir_present = digitalRead(PIR_PIN) == HIGH;
 
   if(pir_present){
-    camera_flag = true; // flag camera
+    //camera_flag = true; // flag camera
     Serial.println("Motion Detected");
     cameraTimer.attach(2.0, updateCameraMax);
   } 
 
   if(!camera_flag) {
-     cameraTimer.detach();
+     //cameraTimer.detach();
   }
 
-  bool camera_present = (camera_max > curr_temp + 2);
-
+  //bool camera_present = (camera_max > curr_temp + 2);
+  bool camera_present = (camera_max > 18);
   // if the pir detects presence (true) or if camera is flagged and detects presence
   present = pir_present || (camera_present && camera_flag);
   Serial.println(present);
@@ -441,7 +448,7 @@ void publishTempState() {
   String output = " Current Temp: " + String(curr_temp) + "\n Camera Max: " +  String(camera_max) + " \n Present? " + String(present);
   client.publish(topic, output.c_str());
   Serial.println("MQTT: " + output);
-
+  //add some state + power setting...
 }
 
 void configureMQTT() {
@@ -469,7 +476,7 @@ void configureMQTT() {
     }
     // Publish and subscribe
     client.publish(topic, "Hi, I'm your ESP32 smart fan ^^");
-    client.subscribe(topic);
+    //client.subscribe(topic);
 }
 
 void callback(char *topic, byte *payload, unsigned int length) {
